@@ -257,8 +257,8 @@ class ConnectEXOInstallerApp:
 
     def get_local_module_info(self, module_name):
         """尝试从本地已安装的模块文件中解析 AppID 和 Thumbprint"""
-        user_profile = os.path.expanduser("~")
-        psm1_path = os.path.join(user_profile, "Documents", "WindowsPowerShell", "Modules", module_name, f"{module_name}.psm1")
+        base_module_path = self.get_best_module_path()
+        psm1_path = os.path.join(base_module_path, module_name, f"{module_name}.psm1")
         
         info = {"AppID": None, "Thumbprint": None, "Path": psm1_path, "Exists": False}
         
@@ -350,6 +350,46 @@ class ConnectEXOInstallerApp:
         # 将环境参数传递给 run_setup
         threading.Thread(target=self.run_setup, args=(env, module_name, app_display_name, cert_subject), daemon=True).start()
 
+    def get_best_module_path(self):
+        """
+        获取最佳的 PowerShell 模块安装路径。
+        优先从环境变量 PSModulePath 中查找位于用户目录下的路径。
+        """
+        user_home = os.path.expanduser("~")
+        ps_module_path = os.environ.get('PSModulePath', '')
+        paths = ps_module_path.split(';')
+        
+        # 1. 尝试找到用户目录下的模块路径
+        for path in paths:
+            clean_path = path.strip()
+            # 检查路径是否在用户目录下，且不是隐藏的系统路径(简单判断)
+            if clean_path.startswith(user_home) and "Modules" in clean_path:
+                # 优先选择存在的路径
+                if os.path.exists(clean_path):
+                    return clean_path
+                
+        # 2. 如果没找到存在的，再次遍历找第一个合法的用户路径（即使不存在）
+        for path in paths:
+            clean_path = path.strip()
+            if clean_path.startswith(user_home) and "Modules" in clean_path:
+                return clean_path
+
+        # 3. Fallback: 默认 Windows PowerShell 路径
+        return os.path.join(user_home, "Documents", "WindowsPowerShell", "Modules")
+
+    def get_profile_path(self):
+        """
+        根据模块路径推断 Profile 路径。
+        """
+        module_path = self.get_best_module_path()
+        # module_path is usually .../Documents/PowerShell/Modules or .../Documents/WindowsPowerShell/Modules
+        
+        # Go up one level from Modules folder to get the config root
+        # .../Documents/PowerShell/Modules -> .../Documents/PowerShell
+        config_root = os.path.dirname(module_path)
+        
+        return os.path.join(config_root, "Microsoft.PowerShell_profile.ps1")
+
     def run_powershell_script(self, script):
         command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script]
         process = subprocess.run(command, capture_output=True, text=True)
@@ -376,8 +416,8 @@ class ConnectEXOInstallerApp:
             current_step += 1
             self.update_progress(current_step, total_steps, f">>> 正在清理本地 PowerShell 模块 ({module_name})...")
             
-            user_profile = os.path.expanduser("~")
-            module_path = os.path.join(user_profile, "Documents", "WindowsPowerShell", "Modules", module_name)
+            base_module_path = self.get_best_module_path()
+            module_path = os.path.join(base_module_path, module_name)
             
             if os.path.exists(module_path):
                 try:
@@ -393,7 +433,7 @@ class ConnectEXOInstallerApp:
             current_step += 1
             self.update_progress(current_step, total_steps, ">>> 正在清理 PowerShell Profile...")
             
-            profile_path = os.path.join(user_profile, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1")
+            profile_path = self.get_profile_path()
             if os.path.exists(profile_path):
                 try:
                     # 读取所有行
@@ -687,8 +727,8 @@ class ConnectEXOInstallerApp:
             current_step += 1
             self.update_progress(current_step, total_steps, f">>> 生成本地连接脚本 ({module_name})...")
             
-            user_profile = os.path.expanduser("~")
-            module_dir = os.path.join(user_profile, "Documents", "WindowsPowerShell", "Modules", module_name)
+            base_module_path = self.get_best_module_path()
+            module_dir = os.path.join(base_module_path, module_name)
             if not os.path.exists(module_dir): os.makedirs(module_dir)
             
             psm1_content = f"""
@@ -707,7 +747,7 @@ Export-ModuleMember -Function {function_name}
                 f.write(psm1_content)
             
             # Update Profile
-            profile_path = os.path.join(user_profile, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1")
+            profile_path = self.get_profile_path()
             if not os.path.exists(os.path.dirname(profile_path)): os.makedirs(os.path.dirname(profile_path))
             
             current_content = ""
