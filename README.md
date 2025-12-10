@@ -1,97 +1,133 @@
-# ConnectEXO Module Automation Tool / 自动化配置工具
+# ConnectEXO Installer (Exchange Online PowerShell Automation)
 
 [English](#english) | [中文](#chinese)
 
 ---
 
 <a name="english"></a>
-# ConnectEXO Module Automation Tool
+## 🇬🇧 English
 
-A GUI tool to automate the setup and configuration of Exchange Online PowerShell connection using Certificate-based authentication (App-only).
+### Introduction
+**ConnectEXO Installer** is a "lazy" configuration tool designed for Exchange Online administrators. It completely automates the complex process of setting up **Certificate-based Authentication (CBA)** for Exchange Online PowerShell.
 
-## Features
+Instead of manually creating Azure AD Apps, generating certificates, uploading public keys, and writing connection scripts, this tool does it all in one click. It generates a local PowerShell command (e.g., `Connect-EXO`) that lets you connect to Exchange Online instantly without entering credentials every time.
 
-*   **Multi-Environment Support**: Supports **Global** (International) and **21Vianet** (China) Office 365 environments.
-*   **Automated Configuration**:
-    *   **Azure AD Login**: Interactive login to your tenant.
-    *   **Certificate Management**: Automatically generates a self-signed certificate locally.
-    *   **App Registration**: Creates an Azure AD Application and configures the certificate.
-    *   **Permissions**: Automatically grants `Exchange.ManageAsApp` API permission and assigns the `Exchange Administrator` role to the Service Principal.
-*   **Local Setup**:
-    *   Checks and installs the `ExchangeOnlineManagement` PowerShell module.
-    *   Generates a local PowerShell module (wrapper) for easy connection.
-    *   Updates your PowerShell Profile to auto-load the module.
-*   **Customization**:
-    *   **Custom Module Name**: You can specify your own name for the PowerShell command (e.g., `MyExo`).
-*   **Uninstallation**:
-    *   **Full Cleanup**: One-click uninstallation that removes the local module, cleans up the PowerShell Profile, deletes the local certificate, and removes the Azure AD Application.
+### Key Features
+*   **Zero-Touch Configuration**:
+    *   Logs into Azure AD (Interactive).
+    *   Creates an Azure AD Application.
+    *   Generates a Self-signed Certificate locally.
+    *   Uploads the certificate to the Azure AD App.
+    *   Grants `Exchange.ManageAsApp` API permissions.
+    *   Assigns the `Exchange Administrator` role to the Service Principal.
+*   **Local Integration**:
+    *   Checks and installs the `ExchangeOnlineManagement` module (NuGet/PSGallery).
+    *   Generates a custom PowerShell module wrapper.
+    *   **Smart Path Detection**: Automatically installs to the correct user module path (supports PowerShell 5.1 & 7+).
+    *   Updates `Microsoft.PowerShell_profile.ps1` for auto-loading.
+*   **Multi-Cloud Support**: Fully supports **Global (International)** and **21Vianet (China)** environments.
+*   **Clean Uninstallation**: A dedicated "Uninstall" mode that removes the local module, cleans the Profile, deletes the certificate, and removes the Azure AD App.
 
-## Usage
+### Prerequisites
+*   **OS**: Windows 10/11 or Windows Server.
+*   **Permissions**: You must be a **Global Administrator** to register apps and assign roles.
+*   **PowerShell**: PowerShell 5.1 or PowerShell 7 (Core) installed.
 
-1.  Run `ConnectEXO_Setup_v22.exe`.
-2.  **Select Cloud Environment**: Choose between "Global" or "21Vianet".
-3.  **Module Name**: (Optional) Enter a custom name for your connection command. Defaults are `ConnectEXO` (Global) or `ConnectEXO21V` (China).
-4.  **Select Action**:
-    *   **Install / Update**: Sets up the environment.
-    *   **Uninstall**: Removes all configurations and cleans up resources.
-5.  Click **Start Automation Config** (开始自动化配置).
-6.  Follow the prompts to log in to your Azure account.
+### Usage
 
-### After Installation
-Restart your PowerShell and run your command (e.g., `ConnectEXO`) to connect to Exchange Online.
+#### 1. Installation
+Download the latest executable `ConnectEXO_Setup_v23.exe` from the [Releases](../../releases) page.
 
-## Build from Source
+#### 2. Setup (Install)
+1.  Run the tool.
+2.  **Cloud Environment**: Select "Global" or "21Vianet".
+3.  **Module Name**: Enter a name for your command (Default: `ConnectEXO`).
+4.  Click **"Start Automation Config"**.
+5.  Log in with your Global Admin account when prompted.
+6.  Wait for the process to complete (approx. 30-60 seconds).
 
-Requirements: Python 3.x, `azure-identity`, `requests`, `tkinter`.
+#### 3. Connect
+Once finished, open a **new** PowerShell window and type:
+```powershell
+ConnectEXO
+```
+*(Or whatever name you configured)*. You will be connected immediately.
 
+#### 4. Uninstallation
+1.  Run the tool.
+2.  Select the **"Uninstall"** tab.
+3.  Enter the Module Name you want to remove.
+4.  Click **"Start Uninstall"**.
+    *   *Note: This will permanently delete the Azure AD App and local certificate.*
+
+### Build from Source
 ```bash
 pip install azure-identity requests
-pyinstaller --noconsole --onefile --clean --name "ConnectEXO_Setup_v22" --add-data "exchange.png;." --hidden-import=azure.identity --hidden-import=requests --hidden-import=tkinter install_connect_exo.py
+# Build with PyInstaller
+python -m PyInstaller --noconsole --onefile --name "ConnectEXO_Setup_v23" --add-data "exchange.png;." --hidden-import=azure.identity --hidden-import=requests --hidden-import=tkinter install_connect_exo.py
 ```
 
 ---
 
 <a name="chinese"></a>
-# ConnectEXO Module 自动化配置工具
+## 🇨🇳 中文 (Chinese)
 
-一个用于自动化配置 Exchange Online PowerShell 基于证书认证（App-only）连接环境的 GUI 工具。
+### 简介
+**ConnectEXO Installer** 是一个为 Exchange Online 管理员打造的"傻瓜化"配置工具。它旨在全自动完成 Exchange Online PowerShell 的 **证书认证 (Certificate-based Authentication)** 配置流程。
 
-## 功能特点
+你不再需要手动去 Azure 门户创建应用、生成证书、上传公钥、写连接脚本。这个工具可以一键完成所有工作，并生成一个本地的 PowerShell 命令（如 `Connect-EXO`），让你以后无需输入密码即可秒连 Exchange Online。
 
-*   **多环境支持**: 支持 **Global (国际版)** 和 **21Vianet (世纪互联)** Office 365 环境。
-*   **全自动化配置**:
-    *   **Azure AD 登录**: 交互式登录到您的租户。
-    *   **证书管理**: 本地自动生成自签名证书。
-    *   **应用注册**: 在 Azure AD 中创建应用程序并配置证书。
-    *   **权限管理**: 自动授予 `Exchange.ManageAsApp` API 权限，并为服务主体分配 `Exchange Administrator` 角色。
-*   **本地环境部署**:
-    *   自动检查并安装 `ExchangeOnlineManagement` PowerShell 模块。
-    *   生成本地 PowerShell 封装模块，方便快捷连接。
-    *   自动更新 PowerShell Profile 配置文件以加载模块。
-*   **自定义功能**:
-    *   **自定义模块名称**: 您可以指定生成的 PowerShell 命令名称（例如：`MyExo`）。
-*   **彻底卸载**:
-    *   **一键清理**: 支持彻底卸载，包括删除本地模块文件、清理 PowerShell Profile 配置、删除本地证书以及移除 Azure AD 上的应用程序。
+### 主要功能
+*   **全自动配置**:
+    *   自动登录 Azure AD (交互式)。
+    *   自动创建 Azure AD 应用程序 (App Registration)。
+    *   自动在本地生成自签名证书。
+    *   自动将证书公钥上传到 Azure AD 应用。
+    *   自动授予 `Exchange.ManageAsApp` API 权限。
+    *   自动为服务主体分配 `Exchange Administrator` (Exchange 管理员) 角色。
+*   **本地集成**:
+    *   自动检查并安装 `ExchangeOnlineManagement` 模块。
+    *   生成自定义的 PowerShell 模块封装脚本。
+    *   **智能路径检测**: 自动识别 PowerShell 模块安装路径 (支持 PS 5.1 和 PS 7+)。
+    *   自动更新 `Microsoft.PowerShell_profile.ps1` 配置文件，实现启动即加载。
+*   **多环境支持**: 完美支持 **Global (国际版)** 和 **21Vianet (世纪互联)** 环境。
+*   **一键卸载**: 提供"卸载"模式，可自动清理本地模块、Profile 配置、本地证书，并删除云端的 Azure AD 应用。
 
-## 使用方法
+### 前置条件
+*   **操作系统**: Windows 10/11 或 Windows Server。
+*   **权限**: 需要 **全局管理员 (Global Admin)** 权限以注册应用和分配角色。
+*   **PowerShell**: 系统需安装 PowerShell 5.1 或 PowerShell 7 (Core)。
 
-1.  运行 `ConnectEXO_Setup_v22.exe`。
-2.  **选择云环境**: 选择 "Global (国际版)" 或 "21Vianet (世纪互联)"。
-3.  **模块名称**: (可选) 输入您想要的连接命令名称。默认为 `ConnectEXO` (国际版) 或 `ConnectEXO21V` (世纪互联)。
-4.  **选择操作**:
-    *   **安装 / 更新 (Install)**: 执行配置安装。
-    *   **彻底卸载 (Uninstall)**: 删除所有配置并清理资源。
-5.  点击 **开始自动化配置**。
-6.  根据弹窗提示完成 Azure 账号登录。
+### 使用指南
 
-### 安装完成后
-重启 PowerShell 终端，直接运行您设置的命令（如 `ConnectEXO`）即可连接到 Exchange Online。
+#### 1. 下载
+从 [Releases](../../releases) 页面下载最新的 `ConnectEXO_Setup_v23.exe`。
 
-## 源码构建
+#### 2. 安装配置
+1.  运行工具。
+2.  **云环境**: 选择 "Global (国际版)" 或 "21Vianet (世纪互联)"。
+3.  **模块名称**: 输入你想要的命令名称 (默认: `ConnectEXO`)。
+4.  点击 **"开始自动化配置"**。
+5.  在弹出的浏览器窗口中登录你的全局管理员账号。
+6.  等待进度条走完 (约 30-60 秒)。
 
-依赖环境: Python 3.x, `azure-identity`, `requests`, `tkinter`.
+#### 3. 连接使用
+配置完成后，打开一个新的 PowerShell 窗口，直接输入：
+```powershell
+ConnectEXO
+```
+*(或者你自定义的名称)*，即可立即连接，无需输入密码。
 
+#### 4. 卸载清理
+1.  运行工具。
+2.  切换到 **"卸载 (Uninstall)"** 标签页。
+3.  输入要卸载的模块名称。
+4.  点击 **"开始卸载"**。
+    *   *注意：这将永久删除云端的 Azure AD 应用和本地证书。*
+
+### 源码构建
 ```bash
 pip install azure-identity requests
-pyinstaller --noconsole --onefile --clean --name "ConnectEXO_Setup_v22" --add-data "exchange.png;." --hidden-import=azure.identity --hidden-import=requests --hidden-import=tkinter install_connect_exo.py
+# 使用 PyInstaller 打包
+python -m PyInstaller --noconsole --onefile --name "ConnectEXO_Setup_v23" --add-data "exchange.png;." --hidden-import=azure.identity --hidden-import=requests --hidden-import=tkinter install_connect_exo.py
 ```
