@@ -33,7 +33,7 @@ class ConnectEXOInstallerApp:
             pass
             
         self.root = root
-        self.root.title("Exchange Online PowerShell自动连接Module傻瓜化配置工具 v22")
+        self.root.title("Exchange Online PowerShell自动连接Module傻瓜化配置工具 v25")
         self.root.geometry("1000x900") # 增大窗口以适应 High DPI
         
         # 设置图标
@@ -350,32 +350,77 @@ class ConnectEXOInstallerApp:
         # 将环境参数传递给 run_setup
         threading.Thread(target=self.run_setup, args=(env, module_name, app_display_name, cert_subject), daemon=True).start()
 
+    def get_documents_dir(self):
+        """获取真实的 'My Documents' 路径 (兼容 OneDrive)"""
+        try:
+            import ctypes.wintypes
+            CSIDL_PERSONAL = 5       # My Documents
+            SHGFP_TYPE_CURRENT = 0   # Get current, not default value
+            buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+            ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, buf)
+            return buf.value
+        except:
+            return os.path.join(os.path.expanduser("~"), "Documents")
+
     def get_best_module_path(self):
         """
         获取最佳的 PowerShell 模块安装路径。
-        优先从环境变量 PSModulePath 中查找位于用户目录下的路径。
+        通过执行 PowerShell 命令来获取真实的 PSModulePath，而不是依赖 Python 进程的环境变量。
         """
         user_home = os.path.expanduser("~")
-        ps_module_path = os.environ.get('PSModulePath', '')
-        paths = ps_module_path.split(';')
         
-        # 1. 尝试找到用户目录下的模块路径
-        for path in paths:
-            clean_path = path.strip()
-            # 检查路径是否在用户目录下，且不是隐藏的系统路径(简单判断)
-            if clean_path.startswith(user_home) and "Modules" in clean_path:
-                # 优先选择存在的路径
-                if os.path.exists(clean_path):
-                    return clean_path
+        # 尝试获取 PowerShell Core (pwsh) 和 Windows PowerShell (powershell) 的路径
+        candidates = []
+        
+        for ps_cmd in ["pwsh", "powershell"]:
+            try:
+                # 获取当前用户的 PSModulePath
+                cmd = [ps_cmd, "-NoProfile", "-Command", "[Environment]::GetEnvironmentVariable('PSModulePath', 'User')"]
+                # creationflags=0x08000000 (CREATE_NO_WINDOW)
+                creation_flags = 0x08000000 if sys.platform == 'win32' else 0
+                process = subprocess.run(cmd, capture_output=True, text=True, creationflags=creation_flags)
                 
-        # 2. 如果没找到存在的，再次遍历找第一个合法的用户路径（即使不存在）
-        for path in paths:
-            clean_path = path.strip()
-            if clean_path.startswith(user_home) and "Modules" in clean_path:
-                return clean_path
+                if process.returncode == 0:
+                    paths = process.stdout.strip().split(';')
+                    for p in paths:
+                        p = p.strip()
+                        # 只要路径不为空，就加入候选 (不再强制检查 startswith(user_home)，因为 OneDrive 路径可能不同)
+                        if p:
+                            candidates.append(p)
+            except FileNotFoundError:
+                continue # 如果没安装 pwsh，跳过
+            except Exception:
+                continue
 
-        # 3. Fallback: 默认 Windows PowerShell 路径
-        return os.path.join(user_home, "Documents", "WindowsPowerShell", "Modules")
+        # 去重并保持顺序
+        unique_candidates = []
+        for p in candidates:
+            if p not in unique_candidates:
+                unique_candidates.append(p)
+
+        # 1. 优先选择已存在的路径
+        for path in unique_candidates:
+            if os.path.exists(path):
+                return path
+                
+        # 2. 如果都不存在，选择第一个看起来合理的路径 (优先选 Documents 下的)
+        for path in unique_candidates:
+            if "Documents" in path:
+                return path
+        
+        # 3. 如果还是没有，Fallback 到默认路径 (使用真实的 Documents 路径)
+        real_docs = self.get_documents_dir()
+        
+        # 优先尝试 PowerShell 7 (Core) 路径，如果用户装了的话
+        ps7_path = os.path.join(real_docs, "PowerShell", "Modules")
+        ps5_path = os.path.join(real_docs, "WindowsPowerShell", "Modules")
+        
+        # 如果检测到 pwsh 存在，优先用 ps7_path
+        try:
+            subprocess.run(["pwsh", "-v"], capture_output=True, creationflags=0x08000000 if sys.platform == 'win32' else 0)
+            return ps7_path
+        except:
+            return ps5_path
 
     def get_profile_path(self):
         """
@@ -704,24 +749,40 @@ class ConnectEXOInstallerApp:
             self.update_progress(current_step, total_steps, ">>> 分配 Exchange Administrator 角色...")
             
             role_template_id = "29232cdf-9323-42fd-ade2-1d097af3e4de"
-            role_assignment_body = {"principalId": sp_id, "roleDefinitionId": role_template_id, "directoryScopeId": "/"}
-            resp = requests.post(f"{graph_endpoint}/v1.0/roleManagement/directory/roleAssignments", headers=headers, json=role_assignment_body)
             
-            if resp.status_code == 201 or "already exists" in resp.text:
-                self.log("√ 角色分配成功 (Unified API)", "SUCCESS")
-            else:
-                self.log("! 尝试使用 Legacy API 分配角色...", "WARNING")
-                # Legacy fallback logic...
-                requests.post(f"{graph_endpoint}/v1.0/directoryRoles", headers=headers, json={"roleTemplateId": role_template_id})
-                resp = requests.get(f"{graph_endpoint}/v1.0/directoryRoles?$filter=roleTemplateId eq '{role_template_id}'", headers=headers)
-                if resp.status_code == 200 and resp.json()['value']:
-                    role_id = resp.json()['value'][0]['id']
-                    member_body = {"@odata.id": f"{graph_endpoint}/v1.0/directoryObjects/{sp_id}"}
-                    resp = requests.post(f"{graph_endpoint}/v1.0/directoryRoles/{role_id}/members/$ref", headers=headers, json=member_body)
-                    if resp.status_code == 204 or "already exist" in resp.text:
-                        self.log("√ 角色分配成功 (Legacy API)", "SUCCESS")
-                    else:
-                        self.log(f"X 角色分配失败: {resp.text}", "ERROR")
+            # 优先使用 Legacy API (directoryRoles) 以确保 Exchange Online 兼容性
+            # 1. 激活角色 (如果尚未激活)
+            requests.post(f"{graph_endpoint}/v1.0/directoryRoles", headers=headers, json={"roleTemplateId": role_template_id})
+            
+            # 2. 获取角色实例 ID
+            resp = requests.get(f"{graph_endpoint}/v1.0/directoryRoles?$filter=roleTemplateId eq '{role_template_id}'", headers=headers)
+            
+            role_assigned = False
+            if resp.status_code == 200 and resp.json().get('value'):
+                role_id = resp.json()['value'][0]['id']
+                member_body = {"@odata.id": f"{graph_endpoint}/v1.0/directoryObjects/{sp_id}"}
+                
+                # 3. 添加成员
+                resp = requests.post(f"{graph_endpoint}/v1.0/directoryRoles/{role_id}/members/$ref", headers=headers, json=member_body)
+                
+                if resp.status_code == 204 or "already exist" in resp.text:
+                    self.log("√ 角色分配成功 (Legacy API)", "SUCCESS")
+                    role_assigned = True
+                else:
+                    self.log(f"! Legacy API 分配失败: {resp.text}，尝试 Unified API...", "WARNING")
+            
+            # 如果 Legacy API 失败，尝试 Unified API (roleManagement)
+            if not role_assigned:
+                role_assignment_body = {"principalId": sp_id, "roleDefinitionId": role_template_id, "directoryScopeId": "/"}
+                resp = requests.post(f"{graph_endpoint}/v1.0/roleManagement/directory/roleAssignments", headers=headers, json=role_assignment_body)
+                
+                if resp.status_code == 201 or "already exists" in resp.text:
+                    self.log("√ 角色分配成功 (Unified API)", "SUCCESS")
+                else:
+                    self.log(f"X 角色分配失败: {resp.text}", "ERROR")
+
+            # 提示用户等待生效
+            self.log("! 注意: 角色分配可能需要 5-15 分钟生效，如果连接报错请稍后重试。", "WARNING")
 
             # --- Step 10: 本地配置 ---
             current_step += 1
